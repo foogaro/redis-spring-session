@@ -18,8 +18,8 @@ The technology stack utilized for this demonstration encompasses a range of tool
 The components include:
 - JDK 17, serving as the foundation with its extensive feature set and performance optimizations.
 - Spring Boot 3.2.3, facilitating rapid application development.
-  - Spring Security 6.2.2, offering comprehensive security features to protect application access and data.
-  - Spring Data Redis 3.2.3, providing seamless integration with Redis for efficient data management and caching solutions.
+    - Spring Security 6.2.2, offering comprehensive security features to protect application access and data.
+    - Spring Data Redis 3.2.3, providing seamless integration with Redis for efficient data management and caching solutions.
 - Redis Stack 7.2, delivering advanced capabilities for handling data structures (such as JSON), caching, streaming and message brokering with high performance.
 
 ## The Code
@@ -109,10 +109,125 @@ The view should resemble the following:
 One key will be associated with the Spring Session ID, encompassing the session along with all its attributes.
 Initially, the details may not be entirely clear.
 It may be possible to infer the class of a specific attribute and some of its properties.
-This lack of clarity is due to the attributes being stored in a binary serialization format, making them not fully readable.  
+This lack of clarity is due to the attributes being stored in a binary serialization format, making them not fully readable.
 
 To identify the user associated with a session, a closer inspection of its values is necessary.
 This task remains kind of manageable with a single session. However, with hundreds or thousands of sessions, locating a specific user's session becomes _challenging_.
 The session data may require a more accessible format or improved serialization to facilitate better analytics.
 
-Addressing this need for enhanced session data representation will be among the initial improvements in the next iteration or branch.
+Addressing this need for enhanced session data representation will be among the initial improvements in the next section.
+
+## Redis Serializer
+
+In the forthcoming section, the focus will be on adopting an alternative session serializer that enhances our ability 
+to pinpoint the user linked to a specific session by allowing a more detailed analysis of the session values. 
+The JSON serializer emerges as a popular choice for this task. 
+By storing session attribute values in JSON format, it significantly improves the readability and interpretability of the data.
+
+Implementing this change requires the development of a dedicated class tailored to this new session configuration. 
+This class will serve the purpose of defining how session attributes are serialized into JSON format, 
+ensuring that the data is both easily accessible and comprehensible. 
+Furthermore, a RedisSerializer configured to handle JSON serialization will need to be declared as a Spring Bean, as described below:
+
+```Java
+@Configuration
+public class SessionConfig implements BeanClassLoaderAware {
+
+    private ClassLoader loader;
+
+    @Bean
+    public RedisSerializer<Object> springSessionDefaultRedisSerializer() {
+        return new Jackson2JsonRedisSerializer(objectMapper(), Object.class);
+    }
+
+    private ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModules(SecurityJackson2Modules.getModules(this.loader));
+        return mapper;
+    }
+
+    @Override
+    public void setBeanClassLoader(ClassLoader classLoader) {
+        this.loader = classLoader;
+    }
+
+}
+```
+
+Multiple `RedisSerializer` options exist for different use cases.
+For insights on the best option for your specific needs, refer to the performance tests conducted, which are accessible at the following GitHub repository:
+- [https://github.com/foogaro/redis-spring-jpa-hibernate/blob/main/serialization-tests.md](https://github.com/foogaro/redis-spring-jpa-hibernate/blob/main/serialization-tests.md)
+
+This setup facilitates the seamless integration of the new serialization method into the existing framework, 
+thereby enabling the desired behavior of more transparent session data management.
+
+After clearing all previously stored sessions in Redis, the application can be executed once more, and login can be performed as described earlier.
+At this stage, the session will be generated as normal, but the values of its attributes will be in JSON format, as illustrated below:
+
+![Redis JSON Session](images/redisinsight-session-json-view.png)
+
+The readability of session data has greatly enhanced, permitting the use of a JSON parser for improved navigation of the JSON structure.
+Nonetheless, manual effort is still required, and identifying the user associated with the session remains a simple process. The Redis Integration provides an annotation named `@EnableRedisIndexedHttpSession`, which introduces indexing capabilities to the session, as indicated by its name. Consequently, this annotation should be added to the `SessionConfig` that was implemented earlier, as shown below:
+
+
+Readability has been greatly enhanced, enabling the use of a JSON parser to more effectively navigate the JSON structure.
+Nonetheless, a manual effort is still required, and locating the user associated with a session remains a challenging and tedious process.
+
+## An even better Redis integration
+
+Redis integration provides an annotation named `@EnableRedisIndexedHttpSession`, which, as the name implies, introduces indexing capabilities to the session.
+Thus, this annotation should be added to the `SessionConfig` that was previously implemented, as shown below:
+
+```Java
+@Configuration
+@EnableRedisIndexedHttpSession
+public class SessionConfig implements BeanClassLoaderAware {
+
+    private ClassLoader loader;
+
+    @Bean
+    public RedisSerializer<Object> springSessionDefaultRedisSerializer() {
+        return new Jackson2JsonRedisSerializer(objectMapper(), Object.class);
+    }
+
+    private ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModules(SecurityJackson2Modules.getModules(this.loader));
+        return mapper;
+    }
+
+    @Override
+    public void setBeanClassLoader(ClassLoader classLoader) {
+        this.loader = classLoader;
+    }
+
+}
+```
+
+Once more, clear the Redis session store, start the application, and proceed with the usual login process.
+The data in Redis will appear as follows:
+
+![Redis Indexed JSON Session](images/redisinsight-indexed-session-json-view.png)
+
+Three additional keys have been added to the Redis session store to enhance session management and expiration tracking:
+1. `spring:session:index:org.springframework.session.FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME:user` embeds the username within the key's structure, directly associating it with the session ID. This facilitates the identification of user sessions, making it straightforward to determine which sessions belong to which users.
+2. `spring:session:sessions:expires:92f8c84b-a7d5-48de-b269-42a2989b65d4` serves as a mechanism to monitor when sessions are due to expire. By tracking the expiration timeline of each session, the system ensures timely session management and resource cleanup.
+3. `spring:session:expirations:1708768500000` offers a timestamp detailing the exact moment a session is set to expire. This precise timing allows for efficient session expiration handling, ensuring that sessions are only active for their intended lifespan.
+
+These improvements enhance the session management system, providing more precise control over session durations and user authentication statuses in a distributed setting.
+They facilitate the identification of authenticated users and the sessions they are logged into, accommodating scenarios where a user may be accessing the system from multiple devices concurrently.
+
+Frequently, stateful applications utilize sessions as a repository for various data elements, such as shopping carts in e-commerce platforms.
+This practice is not optimal because it burdens session management systems, which should primarily handle authentication and authorization for improved performance.
+Additionally, sessions have expiration times, and it may be necessary to retain certain data, like shopping cart contents, independently.
+
+While traditional databases can segregate such data, Redis offers an efficient alternative given its high performance as a persistent storage solution.
+
+For analytical purposes, it is feasible to link shopping carts to sessions while employing distinct keys and Redis data types, like Hashes or JSON.
+This arrangement allows for indexing, enabling administrators to effectively examine sessions, user activities, and shopping cart contents through filtering, searching, and aggregating operations.
+
+Consider the potential to identify all carts with a total value exceeding $1,000 and offer an immediate $100 discount or coupon code if the purchase is completed within 10 minutes.
+This strategy enhances user engagement and sales opportunities.
+
+This is real-time analytics.<br/>
+This is real-time online sales!
