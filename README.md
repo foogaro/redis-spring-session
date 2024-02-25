@@ -4,8 +4,6 @@ This guide outlines essential strategies for session management using Spring and
 
 The objective is to highlight the benefits of using sessions for analytics.
 
-The repository is organized into branches, each providing functional code for specific scenarios. Branches are sequentially numbered, allowing for a logical progression that increases in _sophistication_.
-
 This guide assumes you have foundational knowledge of the Spring framework and concepts such as Sessions and Session Store.
 
 This guide is designed to focus more on Redis, offering insights and practical knowledge on its functionalities and best practices.
