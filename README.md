@@ -164,10 +164,6 @@ At this stage, the session will be generated as normal, but the values of its at
 
 ![Redis JSON Session](images/redisinsight-session-json-view.png)
 
-The readability of session data has greatly enhanced, permitting the use of a JSON parser for improved navigation of the JSON structure.
-Nonetheless, manual effort is still required, and identifying the user associated with the session remains a simple process. The Redis Integration provides an annotation named `@EnableRedisIndexedHttpSession`, which introduces indexing capabilities to the session, as indicated by its name. Consequently, this annotation should be added to the `SessionConfig` that was implemented earlier, as shown below:
-
-
 Readability has been greatly enhanced, enabling the use of a JSON parser to more effectively navigate the JSON structure.
 Nonetheless, a manual effort is still required, and locating the user associated with a session remains a challenging and tedious process.
 
